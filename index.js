@@ -157,6 +157,43 @@ async function run() {
             });
             res.send(result);
         });
+        app.get('/all_meals/:id/reviews', async (req, res) => {
+            const mealId = req.params.id;
+            const meal = await mealsCollections.findOne({ _id: new ObjectId(mealId) });
+            if (!meal) {
+                return res.status(404).send({ message: 'Meal not found' });
+            }
+            const reviews = meal.reviews || [];
+            res.send(reviews);
+        });
+        app.get('/all_meals/:id/reviewConfirm/:email', async (req, res) => {
+            const mealId = req.params.id;
+            const email = req.params.email;
+            const meal = await mealsCollections.findOne({ _id: new ObjectId(mealId) });
+            if (!meal) {
+                return res.status(404).send({ message: 'Meal not found' });
+            }
+            const reviews = meal.reviews || [];
+            const reviewExists = reviews.some((review) => review.email === email);
+            res.send({ reviewExists });
+        });
+        app.post('/all_meals/:id/like', async (req, res) => {
+            const mealId = req.params.id;
+        
+            try {
+                const meal = await mealsCollections.findOne({ _id: new ObjectId(mealId) });
+        
+                if (!meal) {
+                    return res.status(404).send({ message: 'Meal not found' });
+                }
+                const updatedLikes = meal.likes + 1;
+                await mealsCollections.updateOne({ _id: new ObjectId(mealId) }, { $set: { likes: updatedLikes } });
+                res.send({ success: true });
+            } catch (error) {
+                console.error('Error updating like count in the database:', error);
+                res.status(500).send({ message: 'Internal server error' });
+            }
+        });
         // upcomingMeals related api 
         app.get('/upcoming', verifyToken, async (req, res) => {
             const cursor = upcomingMealsCollections.find();
@@ -206,7 +243,6 @@ async function run() {
         });
         app.get('/plansConfirm/:email', async (req, res) => {
             const email = req.params.email;
-            console.log(email);
             const query = { email: email };
             const result = await perchesPlanUsers.findOne(query);
             res.send(result);
