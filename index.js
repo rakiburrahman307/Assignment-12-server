@@ -2,6 +2,7 @@ const express = require('express');
 require('dotenv').config()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const cors = require('cors');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 const jwt = require('jsonwebtoken');
 var cookieParser = require('cookie-parser')
 const app = express();
@@ -35,6 +36,7 @@ const verifyToken = (req, res, next) => {
                 return res.status(err).send({ message: 'Unauthorized access' });
             } else {
                 req.user = decoded;
+                console.log(req.user);
                 next();
             }
         });
@@ -62,6 +64,10 @@ async function run() {
 
         // Database and Collection 
         const mealsCollections = client.db('hostel_management').collection('all_meals');
+        const upcomingMealsCollections = client.db('hostel_management').collection('upcoming');
+        const userCollections = client.db('hostel_management').collection('users');
+        const paymentType = client.db('hostel_management').collection('payment_type');
+        const perchesPlanUsers = client.db('hostel_management').collection('perches_Plan_Users');
 
 
 
@@ -85,13 +91,130 @@ async function run() {
                 .clearCookie('token', { maxAge: 0 })
                 .send({ success: true });
         })
+
+        // admin related api middlewares
+        // use verify admin after verifyToken
+        const verifyAdmin = async (req, res, next) => {
+            const email = req.decoded.email;
+            const query = { email: email };
+            const user = await userCollection.findOne(query);
+            const isAdmin = user?.role === 'admin';
+            if (!isAdmin) {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+            next();
+        }
+        // checking user admin or not 
+        app.get('/users/admin/:email', async (req, res) => {
+            const email = req.params.email;
+            console.log(email);
+
+            if (email !== req.decoded.email) {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
+
+            const query = { email: email };
+            const user = await userCollection.findOne(query);
+            let admin = false;
+            if (user) {
+                admin = user?.role === 'admin';
+            }
+            res.send({ admin });
+        })
+
         // Service Apis 
         // Get the all Of meals 
-        app.get('/all_meals',async (req, res) => {
+        app.get('/all_meals', async (req, res) => {
             const cursor = mealsCollections.find();
             const result = await cursor.toArray();
             res.send(result);
         });
+        app.get('/all_meals/pagination', async (req, res) => {
+            const page = parseInt(req.query.page);
+            const size = parseInt(req.query.size);
+            const cursor = mealsCollections.find()
+                .skip(page * size)
+                .limit(size)
+            const result = await cursor.toArray();
+            res.send(result);
+        });
+        app.get('/all_meals/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await mealsCollections.findOne(query);
+            res.send(result);
+        });
+        app.get('/all_meals_count', async (req, res) => {
+            const count = await mealsCollections.estimatedDocumentCount();
+            res.send({ count });
+        });
+
+        // upcomingMeals related api 
+        app.get('/upcoming', async (req, res) => {
+            const cursor = upcomingMealsCollections.find();
+            const result = await cursor.toArray();
+            res.send(result);
+        });
+
+        app.post('/upcoming', async (req, res) => {
+            const cursor = upcomingMealsCollections.find();
+            const result = await cursor.toArray();
+            res.send(result);
+        });
+        // user data post api 
+        app.post('/users', async (req, res) => {
+            const newUser = req.body;
+            const result = await userCollections.insertOne(newUser)
+            res.send(result);
+        });
+        app.patch('/users', async (req, res) => {
+            const newUser = req.body;
+            const result = await userCollections.insertOne(newUser)
+            res.send(result);
+        });
+        // plans related api
+        app.get('/plans', async (req, res) => {
+            const cursor = paymentType.find();
+            const result = await cursor.toArray();
+            res.send(result);
+        });
+
+        app.get('/plans/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await paymentType.findOne(query);
+            res.send(result);
+        });
+        //  perches plans user apis 
+        app.get('/parchesPlan', async (req, res) => {
+            const cursor = perchesPlanUsers.find();
+            const result = await cursor.toArray();
+            res.send(result);
+        });
+        app.post('/confirmPlans', async (req, res) => {
+            const newUser = req.body;
+            const result = await perchesPlanUsers.insertOne(newUser)
+            res.send(result);
+        });
+        //   payment related apis 
+        app.post('/create-payment-intent', async (req, res) => {
+            const { price } = req.body;
+            const amount = parseInt(price * 100);
+            console.log(amount, 'amount inside the intent')
+
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: 'usd',
+                payment_method_types: ['card']
+            });
+
+            res.send({
+                clientSecret: paymentIntent.client_secret
+            })
+        });
+
+
+
         // using jwt to secure 1 api
         // Get the my Jobs  and Secure the api 
         app.get('/my_jobs', verifyToken, async (req, res) => {
@@ -109,82 +232,6 @@ async function run() {
             }
 
         });
-        // Post a new Jobs 
-        app.post('/all_jobs',verifyToken, async (req, res) => {
-            const newJobs = req.body;
-            const result = await jobsCollections.insertOne(newJobs)
-            res.send(result);
-        });
-        // Update data api
-        app.patch('/all_jobs/:id', verifyToken, async (req, res) => {
-            const id = req.params.id;
-            const data = req.body;
-            const query = { _id: new ObjectId(id) };
-            const updateDoc = {
-                $set: {
-                    jobTitle: data.jobTitle,
-                    formatStartDate: data.formatStartDate,
-                    formatEndDate: data.formatEndDate,
-                    salary: data.salary,
-                    imageUrl: data.photoURL,
-
-
-                }
-            };
-            const result = await jobsCollections.updateOne(query, updateDoc);
-            res.send(result);
-        });
-        // Delete data 
-        app.delete('/all_Jobs/:id', verifyToken, async (req, res) => {
-            const id = req.params.id;
-            const query = { _id: new ObjectId(id) };
-            const result = await jobsCollections.deleteOne(query);
-            res.send(result);
-        });
-        // Get job by Id 
-        app.get('/all_jobs/:id', async (req, res) => {
-            const id = req.params.id;
-            const query = { _id: new ObjectId(id) };
-            const result = await jobsCollections.findOne(query);
-            res.send(result);
-        });
-        //   $inc implement here 
-        app.put('/update_count/:id', async (req, res) => {
-            const id = req.params.id;
-            const query = { _id: new ObjectId(id) };
-            const updateDoc = {
-                $inc: { applicantsNumber: 1 },
-            };
-            const options = { new: true };
-            const result = await jobsCollections.findOneAndUpdate(query, updateDoc, options);
-            res.send(result);
-        });
-
-        // using jwt to secure 2 api
-        //   Get the all applied job collection Ans Secure api
-        app.get('/applied_job', verifyToken, async (req, res) => {
-            if (req?.query?.email !== req?.user?.email) {
-                return res.status(403).send({ message: 'Forbidden access' });
-
-            } else {
-                let query = {};
-                if (req.query?.email) {
-                    query = { applyUserEmail: req?.query?.email }
-                }
-                const cursor = appliedJobsCollections.find(query);
-                const result = await cursor.toArray();
-                res.send(result);
-            }
-
-        });
-        // Post all the applied job here 
-        app.post('/applied_job', verifyToken, async (req, res) => {
-            const newApplied = req.body;
-            const result = await appliedJobsCollections.insertOne(newApplied)
-            res.send(result);
-        });
-
-
 
 
 
@@ -197,13 +244,6 @@ async function run() {
     }
 }
 run().catch(console.dir);
-
-
-
-
-
-
-
 
 app.get('/', (req, res) => {
     res.send("Server Is Running Hot!")
