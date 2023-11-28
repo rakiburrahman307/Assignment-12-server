@@ -12,7 +12,7 @@ const port = process.env.PORT || 5000;
 // Middle Ware
 app.use(express.json());
 app.use(cors({
-    origin: ['http://localhost:5173'],
+    origin: ['http://localhost:5173', 'http://localhost:5000'],
     credentials: true,
 }));
 
@@ -36,7 +36,6 @@ const verifyToken = (req, res, next) => {
                 return res.status(err).send({ message: 'Unauthorized access' });
             } else {
                 req.user = decoded;
-                console.log(req.user);
                 next();
             }
         });
@@ -68,6 +67,7 @@ async function run() {
         const userCollections = client.db('hostel_management').collection('users');
         const paymentType = client.db('hostel_management').collection('payment_type');
         const perchesPlanUsers = client.db('hostel_management').collection('perches_Plan_Users');
+        const requestMealsCollections = client.db('hostel_management').collection('request_meals');
 
 
 
@@ -83,7 +83,8 @@ async function run() {
                     sameSite: 'none'
                 })
                 .send({ success: true });
-        })
+        });
+
 
         app.post('/logout', async (req, res) => {
             const user = req.body;
@@ -95,9 +96,9 @@ async function run() {
         // admin related api middlewares
         // use verify admin after verifyToken
         const verifyAdmin = async (req, res, next) => {
-            const email = req.decoded.email;
+            const email = req?.user?.email;
             const query = { email: email };
-            const user = await userCollection.findOne(query);
+            const user = await userCollections.findOne(query);
             const isAdmin = user?.role === 'admin';
             if (!isAdmin) {
                 return res.status(403).send({ message: 'forbidden access' });
@@ -105,21 +106,19 @@ async function run() {
             next();
         }
         // checking user admin or not 
-        app.get('/users/admin/:email', async (req, res) => {
+        app.get('/users/admin/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
-            console.log(email);
-
-            if (email !== req.decoded.email) {
+            if (email !== req?.user?.email) {
                 return res.status(403).send({ message: 'forbidden access' })
+            } else {
+                const query = { email: email };
+                const user = await userCollections.findOne(query);
+                let admin = false;
+                if (user) {
+                    admin = user?.role === 'admin';
+                }
+                res.send({ admin });
             }
-
-            const query = { email: email };
-            const user = await userCollection.findOne(query);
-            let admin = false;
-            if (user) {
-                admin = user?.role === 'admin';
-            }
-            res.send({ admin });
         })
 
         // Service Apis 
@@ -149,8 +148,17 @@ async function run() {
             res.send({ count });
         });
 
+        app.post('/all_meals_review/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const reviewData = req.body;
+            const result = await mealsCollections.updateOne(query, {
+                $push: { reviews: reviewData },
+            });
+            res.send(result);
+        });
         // upcomingMeals related api 
-        app.get('/upcoming', async (req, res) => {
+        app.get('/upcoming', verifyToken, async (req, res) => {
             const cursor = upcomingMealsCollections.find();
             const result = await cursor.toArray();
             res.send(result);
@@ -196,6 +204,13 @@ async function run() {
             const result = await perchesPlanUsers.insertOne(newUser)
             res.send(result);
         });
+        app.get('/plansConfirm/:email', async (req, res) => {
+            const email = req.params.email;
+            console.log(email);
+            const query = { email: email };
+            const result = await perchesPlanUsers.findOne(query);
+            res.send(result);
+        });
         //   payment related apis 
         app.post('/create-payment-intent', async (req, res) => {
             const { price } = req.body;
@@ -213,7 +228,12 @@ async function run() {
             })
         });
 
-
+        // request for the meals api 
+        app.post('/req_meal', async (req, res) => {
+            const newRequest = req.body;
+            const result = await requestMealsCollections.insertOne(newRequest)
+            res.send(result);
+        });
 
         // using jwt to secure 1 api
         // Get the my Jobs  and Secure the api 
