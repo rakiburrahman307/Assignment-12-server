@@ -68,6 +68,7 @@ async function run() {
         const paymentType = client.db('hostel_management').collection('payment_type');
         const perchesPlanUsers = client.db('hostel_management').collection('perches_Plan_Users');
         const requestMealsCollections = client.db('hostel_management').collection('request_meals');
+        const reviewCollections = client.db('hostel_management').collection('review');
 
 
 
@@ -137,6 +138,48 @@ async function run() {
             const result = await cursor.toArray();
             res.send(result);
         });
+        app.get('/all_meals/infinite-scroll', async (req, res) => {
+            const { page = 1, pageSize = 10 } = req.query;
+            const skip = (page - 1) * pageSize;
+            try {
+                const meals = await mealsCollections.find().skip(skip).limit(pageSize).toArray();
+                res.send(meals);
+            } catch (error) {
+                console.error('Error fetching meals for infinite scroll:', error);
+                res.status(500).send({ message: 'Internal server error' });
+            }
+        });
+        app.get('/all_meals/filter', async (req, res) => {
+            const { category, minPrice, maxPrice } = req.query;
+            const filter = {};
+
+            if (category) {
+                filter.mealType = category;
+            }
+
+            if (minPrice && maxPrice) {
+                filter.price = { $gte: parseInt(minPrice), $lte: parseInt(maxPrice) };
+            }
+
+            try {
+                const meals = await mealsCollections.find(filter).toArray();
+                res.send(meals);
+            } catch (error) {
+                console.error('Error filtering meals:', error);
+                res.status(500).send({ message: 'Internal server error' });
+            }
+        });
+        app.get('/all_meals/search/:title', async (req, res) => {
+            const searchTitle = req.params.title;
+            try {
+                const meals = await mealsCollections.find({ mealType: { $regex: searchTitle, $options: 'i' } }).toArray();
+                res.send(meals);
+            } catch (error) {
+                console.error('Error searching meals:', error);
+                res.status(500).send({ message: 'Internal server error' });
+            }
+        });
+
         app.get('/all_meals/:id', async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
@@ -179,21 +222,25 @@ async function run() {
         });
         app.post('/all_meals/:id/like', async (req, res) => {
             const mealId = req.params.id;
-        
+
             try {
-                const meal = await mealsCollections.findOne({ _id: new ObjectId(mealId) });
-        
-                if (!meal) {
+                const updatedMeal = await mealsCollections.findOneAndUpdate(
+                    { _id: new ObjectId(mealId) },
+                    { $inc: { likes: 1 } },
+                    { returnDocument: 'after' }
+                );
+
+                if (!updatedMeal.value) {
                     return res.status(404).send({ message: 'Meal not found' });
                 }
-                const updatedLikes = meal.likes + 1;
-                await mealsCollections.updateOne({ _id: new ObjectId(mealId) }, { $set: { likes: updatedLikes } });
+
                 res.send({ success: true });
             } catch (error) {
                 console.error('Error updating like count in the database:', error);
                 res.status(500).send({ message: 'Internal server error' });
             }
         });
+
         // upcomingMeals related api 
         app.get('/upcoming', verifyToken, async (req, res) => {
             const cursor = upcomingMealsCollections.find();
@@ -270,7 +317,12 @@ async function run() {
             const result = await requestMealsCollections.insertOne(newRequest)
             res.send(result);
         });
-
+        app.get('/req_meal/:email', async (req, res) => {
+            const email = req.params.email;
+            const query = { customerEmail: email }
+            const result = await requestMealsCollections.find(query).toArray();
+            res.send(result);
+        });
         // using jwt to secure 1 api
         // Get the my Jobs  and Secure the api 
         app.get('/my_jobs', verifyToken, async (req, res) => {
@@ -289,7 +341,45 @@ async function run() {
 
         });
 
+        // review collection related api 
+        app.post('/reviewsCollections', async (req, res) => {
+            const newReview = req.body;
+            const result = await reviewCollections.insertOne(newReview)
+            res.send(result);
+        });
+        app.get('/reviews/:email', async (req, res) => {
+            const email = req.params.email;
+            const query = { customerEmail: email };
+            const result = await reviewCollections.find(query).toArray();
+            res.send(result);
+        });
+        app.delete('/reviews/:email', async (req, res) => {
+            const email = req.params.email;
+            const query = { customerEmail: email }
+            const result = await reviewCollections.deleteOne(query);
+            res.send(result);
+        });
 
+        app.patch('/reviews/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+                const { updatedText } = req.body;
+
+                const query = { _id: new ObjectId(id) };
+                const update = { $set: { text: updatedText } };
+
+                const result = await reviewCollections.updateOne(query, update);
+
+                if (result.modifiedCount === 0) {
+                    return res.status(404).json({ success: false, message: 'Review not found' });
+                }
+
+                res.json({ success: true, updatedCount: result.modifiedCount });
+            } catch (error) {
+                console.error('Error updating review field:', error);
+                res.status(500).send({ success: false, message: 'Internal server error' });
+            }
+        });
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
