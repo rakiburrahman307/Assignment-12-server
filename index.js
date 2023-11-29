@@ -97,14 +97,19 @@ async function run() {
         // admin related api middlewares
         // use verify admin after verifyToken
         const verifyAdmin = async (req, res, next) => {
-            const email = req?.user?.email;
+            const email = req?.user;
             const query = { email: email };
             const user = await userCollections.findOne(query);
             const isAdmin = user?.role === 'admin';
+            console.log(user);
+            console.log(isAdmin);
+            console.log(email);
             if (!isAdmin) {
                 return res.status(403).send({ message: 'forbidden access' });
+            } else {
+                next();
             }
-            next();
+
         }
         // checking user admin or not 
         app.get('/users/admin/:email', verifyToken, async (req, res) => {
@@ -148,6 +153,12 @@ async function run() {
                 console.error('Error fetching meals for infinite scroll:', error);
                 res.status(500).send({ message: 'Internal server error' });
             }
+        });
+        app.delete('/allMeal/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await mealsCollections.deleteOne(query);
+            res.send(result);
         });
         app.get('/all_meals/filter', async (req, res) => {
             const { category, minPrice, maxPrice } = req.query;
@@ -198,6 +209,11 @@ async function run() {
             const result = await mealsCollections.updateOne(query, {
                 $push: { reviews: reviewData },
             });
+            res.send(result);
+        });
+        app.post('/add_meal', verifyToken, async (req, res) => {
+            const mealData = req.body;
+            const result = await mealsCollections.insertOne(mealData);
             res.send(result);
         });
         app.get('/all_meals/:id/reviews', async (req, res) => {
@@ -251,6 +267,11 @@ async function run() {
         app.post('/upcoming', async (req, res) => {
             const cursor = upcomingMealsCollections.find();
             const result = await cursor.toArray();
+            res.send(result);
+        });
+        app.post('/add_meal_upcoming', verifyToken, async (req, res) => {
+            const mealData = req.body;
+            const result = await upcomingMealsCollections.insertOne(mealData);
             res.send(result);
         });
         // user data post api 
@@ -317,12 +338,58 @@ async function run() {
             const result = await requestMealsCollections.insertOne(newRequest)
             res.send(result);
         });
+        app.get('/requested_meals', async (req, res) => {
+            try {
+                const { username, email } = req.query;
+                const query = {};
+
+                if (username) {
+                    // Case-insensitive regex search for username
+                    query.customerName = { $regex: new RegExp(username, 'i') };
+                }
+
+                if (email) {
+                    // Case-insensitive regex search for email
+                    query.customerEmail = { $regex: new RegExp(email, 'i') };
+                }
+
+                const requestedMeals = await requestMealsCollections.find(query).toArray();
+                res.json(requestedMeals);
+            } catch (error) {
+                console.error('Error fetching requested meals:', error);
+                res.status(500).json({ message: 'Internal server error' });
+            }
+        });
+        app.patch('/req_meal_status/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const info = req.body;
+            console.log(info.status);
+            const updateDoc = {
+                $set: {
+                    status: info?.status
+                }
+            }
+            const result = await requestMealsCollections.updateOne(query, updateDoc);
+            res.send(result);
+        });
+
         app.get('/req_meal/:email', async (req, res) => {
             const email = req.params.email;
             const query = { customerEmail: email }
             const result = await requestMealsCollections.find(query).toArray();
             res.send(result);
         });
+        app.get('/req_meal', async (req, res) => {
+            try {
+                const result = await requestMealsCollections.find().toArray();
+                res.json(result);
+            } catch (error) {
+                console.error('Error fetching requested meals:', error);
+                res.status(500).json({ message: 'Internal server error' });
+            }
+        });
+
         // using jwt to secure 1 api
         // Get the my Jobs  and Secure the api 
         app.get('/my_jobs', verifyToken, async (req, res) => {
