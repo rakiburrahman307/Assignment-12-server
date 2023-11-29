@@ -101,9 +101,6 @@ async function run() {
             const query = { email: email };
             const user = await userCollections.findOne(query);
             const isAdmin = user?.role === 'admin';
-            console.log(user);
-            console.log(isAdmin);
-            console.log(email);
             if (!isAdmin) {
                 return res.status(403).send({ message: 'forbidden access' });
             } else {
@@ -158,6 +155,11 @@ async function run() {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await mealsCollections.deleteOne(query);
+            res.send(result);
+        });
+        app.post('/publishMeal', async (req, res) => {
+            const mealData = req.body;
+            const result = await mealsCollections.insertOne(mealData);
             res.send(result);
         });
         app.get('/all_meals/filter', async (req, res) => {
@@ -269,6 +271,26 @@ async function run() {
             const result = await cursor.toArray();
             res.send(result);
         });
+        app.get('/upcoming_meals', async (req, res) => {
+            try {
+                const { username, email } = req.query;
+                const query = {};
+
+                if (username) {
+                    query.mealType = { $regex: new RegExp(username, 'i') };
+                }
+
+                if (email) {
+                    query.gmail = { $regex: new RegExp(email, 'i') };
+                }
+
+                const requestedMeals = await upcomingMealsCollections.find(query).toArray();
+                res.json(requestedMeals);
+            } catch (error) {
+                console.error('Error fetching requested meals:', error);
+                res.status(500).json({ message: 'Internal server error' });
+            }
+        });
         app.post('/add_meal_upcoming', verifyToken, async (req, res) => {
             const mealData = req.body;
             const result = await upcomingMealsCollections.insertOne(mealData);
@@ -280,9 +302,42 @@ async function run() {
             const result = await userCollections.insertOne(newUser)
             res.send(result);
         });
+        app.get('/user/admin', async (req, res) => {
+            try {
+                const { username, email } = req.query;
+                const query = {};
+
+                if (username) {
+                    query.name = { $regex: new RegExp(username, 'i') };
+                }
+
+                if (email) {
+                    query.email = { $regex: new RegExp(email, 'i') };
+                }
+
+                const requestedMeals = await userCollections.find(query).toArray();
+                res.json(requestedMeals);
+            } catch (error) {
+                console.error('Error fetching requested meals:', error);
+                res.status(500).json({ message: 'Internal server error' });
+            }
+        });
         app.patch('/users', async (req, res) => {
             const newUser = req.body;
             const result = await userCollections.insertOne(newUser)
+            res.send(result);
+        });
+        app.patch('/user/admin/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const info = req.body;
+            console.log(info.status);
+            const updateDoc = {
+                $set: {
+                    role: info?.role
+                }
+            }
+            const result = await userCollections.updateOne(query, updateDoc);
             res.send(result);
         });
         // plans related api
