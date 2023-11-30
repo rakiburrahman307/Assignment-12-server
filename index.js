@@ -131,7 +131,7 @@ async function run() {
             const result = await cursor.toArray();
             res.send(result);
         });
-        app.patch('/update_meal/:id', async (req, res) => {
+        app.patch('/update_meal/:id', verifyToken, async (req, res) => {
             const id = req?.params?.id;
             const info = req?.body;
             const query = { _id: new ObjectId(id) }
@@ -152,7 +152,7 @@ async function run() {
             const result = await mealsCollections.updateOne(query, updateDoc);
             res.send(result);
         });
-        app.get('/all_meals/pagination', async (req, res) => {
+        app.get('/all_meals/pagination', verifyToken, async (req, res) => {
             const page = parseInt(req.query.page);
             const size = parseInt(req.query.size);
             const cursor = mealsCollections.find()
@@ -178,7 +178,7 @@ async function run() {
             const result = await mealsCollections.deleteOne(query);
             res.send(result);
         });
-        app.post('/publishMeal', async (req, res) => {
+        app.post('/publishMeal', verifyToken, async (req, res) => {
             const mealData = req.body;
             const result = await mealsCollections.insertOne(mealData);
             res.send(result);
@@ -225,7 +225,7 @@ async function run() {
             res.send({ count });
         });
 
-        app.post('/all_meals_review/:id', async (req, res) => {
+        app.post('/all_meals_review/:id', verifyToken, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
             const reviewData = req.body;
@@ -239,7 +239,7 @@ async function run() {
             const result = await mealsCollections.insertOne(mealData);
             res.send(result);
         });
-        app.get('/all_meals/:id/reviews', async (req, res) => {
+        app.get('/all_meals/:id/reviews', verifyToken, async (req, res) => {
             const mealId = req.params.id;
             const meal = await mealsCollections.findOne({ _id: new ObjectId(mealId) });
             if (!meal) {
@@ -248,7 +248,7 @@ async function run() {
             const reviews = meal.reviews || [];
             res.send(reviews);
         });
-        app.get('/all_meals/:id/reviewConfirm/:email', async (req, res) => {
+        app.get('/all_meals/:id/reviewConfirm/:email', verifyToken, async (req, res) => {
             const mealId = req.params.id;
             const email = req.params.email;
             const meal = await mealsCollections.findOne({ _id: new ObjectId(mealId) });
@@ -259,7 +259,7 @@ async function run() {
             const reviewExists = reviews.some((review) => review.email === email);
             res.send({ reviewExists });
         });
-        app.post('/all_meals/:id/like', async (req, res) => {
+        app.post('/all_meals/:id/like', verifyToken, async (req, res) => {
             const mealId = req.params.id;
 
             try {
@@ -281,7 +281,7 @@ async function run() {
         });
 
         // upcomingMeals related api 
-        app.get('/upcoming', verifyToken, async (req, res) => {
+        app.get('/upcoming', async (req, res) => {
             const cursor = upcomingMealsCollections.find();
             const result = await cursor.toArray();
             res.send(result);
@@ -348,7 +348,7 @@ async function run() {
             const result = await userCollections.insertOne(newUser)
             res.send(result);
         });
-        app.patch('/user/admin/:id', async (req, res) => {
+        app.patch('/user/admin/:id', verifyToken, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
             const info = req.body;
@@ -428,18 +428,22 @@ async function run() {
             const result = await requestMealsCollections.insertOne(newRequest)
             res.send(result);
         });
-        app.get('/requested_meals', async (req, res) => {
+        app.delete('/req_meal/:id', verifyToken, async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await requestMealsCollections.deleteOne(query)
+            res.send(result);
+        });
+        app.get('/requested_meals', verifyToken, async (req, res) => {
             try {
                 const { username, email } = req.query;
                 const query = {};
 
                 if (username) {
-                    // Case-insensitive regex search for username
                     query.customerName = { $regex: new RegExp(username, 'i') };
                 }
 
                 if (email) {
-                    // Case-insensitive regex search for email
                     query.customerEmail = { $regex: new RegExp(email, 'i') };
                 }
 
@@ -450,7 +454,7 @@ async function run() {
                 res.status(500).json({ message: 'Internal server error' });
             }
         });
-        app.patch('/req_meal_status/:id', async (req, res) => {
+        app.patch('/req_meal_status/:id', verifyToken, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
             const info = req.body;
@@ -464,13 +468,13 @@ async function run() {
             res.send(result);
         });
 
-        app.get('/req_meal/:email', async (req, res) => {
+        app.get('/req_meal/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
             const query = { customerEmail: email }
             const result = await requestMealsCollections.find(query).toArray();
             res.send(result);
         });
-        app.get('/req_meal', async (req, res) => {
+        app.get('/req_meal', verifyToken, async (req, res) => {
             try {
                 const result = await requestMealsCollections.find().toArray();
                 res.json(result);
@@ -480,44 +484,26 @@ async function run() {
             }
         });
 
-        // using jwt to secure 1 api
-        // Get the my Jobs  and Secure the api 
-        app.get('/my_jobs', verifyToken, async (req, res) => {
-            if (req?.query?.email !== req?.user?.email) {
-                return res.status(403).send({ message: 'Forbidden access' });
-
-            } else {
-                let query = {};
-                if (req.query?.email) {
-                    query = { jobPost: req?.query?.email }
-                }
-                const cursor = jobsCollections.find(query);
-                const result = await cursor.toArray();
-                res.send(result);
-            }
-
-        });
-
         // review collection related api 
-        app.post('/reviewsCollections', async (req, res) => {
+        app.post('/reviewsCollections', verifyToken, async (req, res) => {
             const newReview = req.body;
             const result = await reviewCollections.insertOne(newReview)
             res.send(result);
         });
-        app.get('/reviews/:email', async (req, res) => {
+        app.get('/reviews/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
             const query = { customerEmail: email };
             const result = await reviewCollections.find(query).toArray();
             res.send(result);
         });
-        app.delete('/reviews/:email', async (req, res) => {
+        app.delete('/reviews/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
             const query = { customerEmail: email }
             const result = await reviewCollections.deleteOne(query);
             res.send(result);
         });
 
-        app.patch('/reviews/:id', async (req, res) => {
+        app.patch('/reviews/:id', verifyToken, async (req, res) => {
             try {
                 const id = req.params.id;
                 const { updatedText } = req.body;
