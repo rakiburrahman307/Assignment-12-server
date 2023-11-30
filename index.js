@@ -12,7 +12,7 @@ const port = process.env.PORT || 5000;
 // Middle Ware
 app.use(express.json());
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:5000', 'https://65677819d07b794287985cc9--relaxed-puffpuff-31caad.netlify.app/'],
+    origin: ['http://localhost:5173', 'http://localhost:5000', 'https://656888cd76ceac2c2dbeb5a7--relaxed-puffpuff-31caad.netlify.app'],
     credentials: true,
 }));
 
@@ -525,8 +525,8 @@ async function run() {
         });
 
         // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
+        // await client.db("admin").command({ ping: 1 });
+        // console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
         // Ensures that the client will close when you finish/error
         // await client.close();
