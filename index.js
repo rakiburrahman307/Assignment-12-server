@@ -12,7 +12,7 @@ const port = process.env.PORT || 5000;
 // Middle Ware
 app.use(express.json());
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:5000'],
+    origin: ['http://localhost:5173', 'http://localhost:5000', 'https://65677819d07b794287985cc9--relaxed-puffpuff-31caad.netlify.app/'],
     credentials: true,
 }));
 
@@ -75,7 +75,7 @@ async function run() {
         // Authentication related api 
         app.post('/jwt', async (req, res) => {
             const user = req.body;
-            const token = jwt.sign(user, process.env.ACCESS_TOKEN, { expiresIn: '2h' })
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN, { expiresIn: '24h' })
 
             res
                 .cookie('token', token, {
@@ -129,6 +129,27 @@ async function run() {
         app.get('/all_meals', async (req, res) => {
             const cursor = mealsCollections.find();
             const result = await cursor.toArray();
+            res.send(result);
+        });
+        app.patch('/update_meal/:id', async (req, res) => {
+            const id = req?.params?.id;
+            const info = req?.body;
+            const query = { _id: new ObjectId(id) }
+            const updateDoc = {
+                $set: {
+                    mealType: info?.mealType,
+                    mealTitle: info?.mealTitle,
+                    mealImage: info?.mealImage,
+                    ingredients: info?.ingredients,
+                    mealDescription: info?.mealDescription,
+                    price: info?.price,
+                    rating: info?.rating,
+                    adminName: info?.adminName,
+                    gmail: info?.gmail,
+                    postTime: info?.postTime,
+                }
+            }
+            const result = await mealsCollections.updateOne(query, updateDoc);
             res.send(result);
         });
         app.get('/all_meals/pagination', async (req, res) => {
@@ -338,6 +359,20 @@ async function run() {
                 }
             }
             const result = await userCollections.updateOne(query, updateDoc);
+            res.send(result);
+        });
+        app.patch('/user_package/:email', async (req, res) => {
+            const email = req.params.email;
+            const query = { email: email };
+            const info = req.body;
+            console.log(info.package);
+            const options = { upsert: true };
+            const updateDoc = {
+                $set: {
+                    package: info?.package
+                }
+            }
+            const result = await userCollections.updateOne(query, updateDoc, options);
             res.send(result);
         });
         // plans related api
