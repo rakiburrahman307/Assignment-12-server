@@ -12,7 +12,7 @@ const port = process.env.PORT || 5000;
 // Middle Ware
 app.use(express.json());
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:5000', 'https://656888cd76ceac2c2dbeb5a7--relaxed-puffpuff-31caad.netlify.app'],
+    origin: ['http://localhost:5173', 'http://localhost:5000', 'https://relaxed-puffpuff-31caad.netlify.app'],
     credentials: true,
 }));
 
